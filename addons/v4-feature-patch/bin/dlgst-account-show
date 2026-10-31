@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CONFIG=${XRAY_CONFIG:-/etc/xray/config.json}
+DOMAIN=${XRAY_DOMAIN_FILE:-/etc/xray/domain}
+if [[ $# -lt 2 ]]; then echo 'Usage: dlgst-account-show <protocol: vmess|vless|trojan|shadowsocks> <username>'; exit 2; fi
+proto=$1; user=$2
+[[ -r "$CONFIG" ]] || { echo "Config tidak ditemukan: $CONFIG"; exit 1; }
+command -v jq >/dev/null || { echo 'jq belum terpasang'; exit 1; }
+jq -e . "$CONFIG" >/dev/null || { echo 'JSON Xray tidak valid'; exit 1; }
+domain=$(cat "$DOMAIN" 2>/dev/null || hostname -f)
+case "$proto" in
+ vmess|vless|trojan|shadowsocks) ;;
+ *) echo 'Protokol tidak dikenal'; exit 2;;
+esac
+# Output hanya metadata aman; secret/password/UUID tidak ditampilkan.
+jq -r --arg u "$user" --arg p "$proto" --arg d "$domain" '
+  [.inbounds[] as $i | ($i.settings.clients // [])[]? | select(.email==$u) |
+   {tag:$i.tag, protocol:$i.protocol, network:($i.streamSettings.network // "tcp"), security:($i.streamSettings.security // "none"),
+    port:$i.port, path:($i.streamSettings.wsSettings.path // $i.streamSettings.xhttpSettings.path // "-"),
+    serviceName:($i.streamSettings.grpcSettings.serviceName // "-")} ] as $a |
+  if ($a|length)==0 then "Akun tidak ditemukan: \($u)" else
+    "ACCOUNT INFORMATION\nUsername : \($u)\nDomain   : \($d)\n" + ($a|map("Inbound  : \(.tag)\nProtocol : \(.protocol)\nNetwork  : \(.network)\nSecurity : \(.security)\nPort     : \(.port)\nPath     : \(.path)\nService  : \(.serviceName)\n")|join("\n")) end
+' "$CONFIG"

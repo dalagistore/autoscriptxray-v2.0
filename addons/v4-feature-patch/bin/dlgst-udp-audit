@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CONFIG=${XRAY_CONFIG:-/etc/xray/config.json}
+if [[ ! -r "$CONFIG" ]]; then echo "Xray config tidak ditemukan: $CONFIG"; exit 1; fi
+command -v jq >/dev/null || { echo 'jq belum terpasang'; exit 1; }
+jq -e . "$CONFIG" >/dev/null || { echo 'JSON Xray tidak valid'; exit 1; }
+echo 'DLGST UDP AUDIT - INBOUND CHECK'
+printf '%-22s %-14s %-12s %-8s\n' TAG PROTOCOL NETWORK PORT
+jq -r '.inbounds[] | [.tag, .protocol, (.streamSettings.network // "tcp"), (.port|tostring)] | @tsv' "$CONFIG" | while IFS=$'\t' read -r tag proto network port; do printf '%-22s %-14s %-12s %-8s\n' "$tag" "$proto" "$network" "$port"; done
+echo
+echo 'UDP NOTES'
+echo '- VMess/VLESS/Trojan UDP application traffic is generally proxied inside the proxy session (for example XUDP), not by changing the inbound transport to UDP.'
+echo '- mKCP is a distinct UDP-based transport and requires a dedicated inbound plus firewall UDP port.'
+echo '- Shadowsocks native UDP requires a native Shadowsocks inbound; WS/gRPC plugin links are not proof of native UDP support.'
+echo '- REALITY supports selected stream transports; it is not compatible with WS/HTTP Upgrade or mKCP.'
+echo '- This audit is read-only. It does not modify config or firewall.'

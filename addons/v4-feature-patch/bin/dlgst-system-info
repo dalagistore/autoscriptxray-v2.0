@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source /usr/local/lib/dlgst-v4/system-info.sh
+case "${1:-all}" in
+  info) dlgst_system_info ;;
+  bandwidth) dlgst_bandwidth ;;
+  all) dlgst_system_info; echo; echo 'BANDWIDTH COUNTER'; dlgst_bandwidth ;;
+  *) echo 'Usage: dlgst-system-info [all|info|bandwidth]'; exit 2 ;;
+esac
