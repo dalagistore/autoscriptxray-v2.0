@@ -1,0 +1,24 @@
+#!/bin/bash
+BASE=/etc/autoscriptvpn/xray
+while true; do
+ clear
+ echo '=========================================='
+ echo '      DLGST XRAY PANEL - VMESS'
+ echo '=========================================='
+ echo '[1] Tambah Akun'
+ echo '[2] Hapus Akun'
+ echo '[3] Cek Aktivitas Login'
+ echo '[4] Perpanjang Akun'
+ echo '[5] Daftar Akun'
+ echo '[x] Kembali'
+ read -r -p 'Pilih opsi: ' opt
+ case "$opt" in
+  1) bash "$BASE/add-vmess.sh";;
+  2) bash "$BASE/del-vmess.sh";;
+  3) bash "$BASE/cek-vmess.sh";;
+  4) bash "$BASE/renew-vmess.sh";;
+  5) bash "$BASE/list-vmess.sh";;
+  x|X) exit 0;;
+  *) echo 'Pilihan salah'; sleep 1;;
+ esac
+done

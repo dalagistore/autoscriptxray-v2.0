@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+CFG=/etc/xray/config.json
+usage(){ echo 'Usage: dlgst-account {add|del|list} {vmess|vless|trojan|shadowsocks} USER [TAG]'; exit 2; }
+[[ -f $CFG ]] || { echo "Missing $CFG"; exit 1; }
+cmd=${1:-}; proto=${2:-}; user=${3:-}; tag=${4:-}
+case "$cmd:$proto" in
+ add:vmess|add:vless|add:trojan|add:shadowsocks|del:vmess|del:vless|del:trojan|del:shadowsocks|list:vmess|list:vless|list:trojan|list:shadowsocks) ;;
+ *) usage;; esac
+if [[ $cmd == list ]]; then jq -r --arg p "$proto" '.inbounds[]|select(.protocol==$p)|"TAG: \(.tag) PORT: \(.port)" , ((.settings.clients // [])[]? | "  USER: \(.email // .name // .password // .id)")' "$CFG"; exit; fi
+[[ -n $user ]] || usage
+[[ -n $tag ]] || tag="$proto-ws-tls"
+TMP=$(mktemp); trap 'rm -f "$TMP"' EXIT
+cp -a "$CFG" "$CFG.bak-$(date +%Y%m%d-%H%M%S)"
+if [[ $cmd == add ]]; then
+  if [[ $proto == vmess || $proto == vless ]]; then ident=$(cat /proc/sys/kernel/random/uuid); else ident=$(openssl rand -hex 16); fi
+  jq --arg p "$proto" --arg t "$tag" --arg u "$user" --arg id "$ident" '
+   .inbounds |= map(if .protocol==$p and .tag==$t then
+    .settings.clients = ((.settings.clients // []) | map(select((.email // .name // "") != $u)) + (if $p=="trojan" or $p=="shadowsocks" then [{"password":$id,"email":$u}] else [{"id":$id,"email":$u,"alterId":0}] end)) else . end)' "$CFG" > "$TMP"
+  echo "Created $proto user=$user tag=$tag credential=$ident"
+else
+  jq --arg p "$proto" --arg t "$tag" --arg u "$user" '.inbounds |= map(if .protocol==$p and .tag==$t then .settings.clients=((.settings.clients // [])|map(select((.email // .name // "") != $u))) else . end)' "$CFG" > "$TMP"
+  echo "Deleted $proto user=$user tag=$tag"
+fi
+if ! jq empty "$TMP" || ! (xray run -test -config "$TMP" >/dev/null 2>&1 || xray -test -config "$TMP" >/dev/null 2>&1); then echo 'Validation failed; original config retained.'; exit 1; fi
+install -m 600 "$TMP" "$CFG"; systemctl restart xray
